@@ -134,6 +134,12 @@ async function procesarMensaje(jid, texto, hasImage) {
     await sock.sendMessage(jid, { text: 'Muchas gracias por contarnos, hermosa ✨' });
     await new Promise(r => setTimeout(r, 1000));
     await sock.sendMessage(jid, { text: PREGUNTA_FOTO });
+    try {
+      await sock.sendMessage(jid, {
+        image: Buffer.from(REF_FOTO_B64, 'base64'),
+        caption: 'Así necesitamos la foto: de espalda, buena iluminación ✨'
+      });
+    } catch(e) { console.log('Error enviando foto ref:', e.message); }
     return;
   }
 
