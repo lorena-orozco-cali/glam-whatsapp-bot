@@ -135,9 +135,10 @@ async function procesarMensaje(jid, texto, hasImage) {
     await new Promise(r => setTimeout(r, 1000));
     await sock.sendMessage(jid, { text: PREGUNTA_FOTO });
     try {
-      const imgBuffer = Buffer.from(REF_FOTO_B64, 'base64');
+      const { default: fetch } = await import('node-fetch').catch(() => ({ default: null }));
+      const imgResp = await axios.get(REF_FOTO_URL, { responseType: 'arraybuffer' });
       await sock.sendMessage(jid, {
-        image: imgBuffer,
+        image: Buffer.from(imgResp.data),
         mimetype: 'image/jpeg',
         caption: 'Así necesitamos la foto: de espalda, buena iluminación ✨'
       });
