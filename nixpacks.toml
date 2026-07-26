@@ -1,5 +1,4 @@
 [phases.install]
-cmds = ["npm install"]
-
+cmds = ["npm install --legacy-peer-deps"]
 [start]
 cmd = "node index.js"
