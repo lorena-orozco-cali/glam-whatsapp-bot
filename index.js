@@ -13,86 +13,113 @@ let sock;
 let ultimoQR = null;
 const sessions = {};
 
-// ═══ DETECCION DE SERVICIO ═══
 function norm(s){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
+// ═══ DETECCION POR PAUTA (texto pre-cargado desde Meta) ═══
+const PAUTAS = {
+  'balayage': 'balayage',
+  'corte_blower': 'corte',
+  'corte': 'corte',
+  'blower': 'corte',
+  'novia': 'novia',
+  'terapias': 'terapias',
+  'terapia': 'terapias',
+  'asesoria_color': 'asesoria_color',
+  'asesoria': 'asesoria_color',
+  'tonalizado': 'tonalizado',
+  'extraccion': 'extraccion',
+  'extraccion_color': 'extraccion',
+  'crecimiento': 'crecimiento',
+  'crecimiento_preaclarado': 'crecimiento',
+  'ondas': 'ondas',
+  'pre_aclaracion': 'pre_aclaracion',
+  'super_aclaracion': 'pre_aclaracion',
+};
+
+// ═══ DETECCION POR TEXTO LIBRE ═══
 function detectService(msg) {
   const m = norm(msg);
   if (m.includes('balayage')||m.includes('ligth')||m.includes('bronde')||m.includes('brunette')||m.includes('rubio')||m.includes('luces')||m.includes('mechas')) return 'balayage';
   if (m.includes('novia')||m.includes('boda')||m.includes('maquillaje')) return 'novia';
   if (m.includes('terapia')||m.includes('keratina')||m.includes('hidrat')||m.includes('glicoprot')||m.includes('hair spa')||m.includes('ampolleta')) return 'terapias';
   if (m.includes('corte')||m.includes('blower')||m.includes('secado')||m.includes('cepillado')) return 'corte';
-  if (m.includes('asesoria')||m.includes('asesor')||m.includes('que color')) return 'asesoria_color';
+  if (m.includes('asesoria')||m.includes('asesor')||m.includes('que color me queda')) return 'asesoria_color';
   if (m.includes('tonaliz')||m.includes('matiz')) return 'tonalizado';
   if (m.includes('extraccion')||m.includes('quitar color')||m.includes('sacar color')) return 'extraccion';
-  if (m.includes('crecimiento')||m.includes('raiz')||m.includes('raices')||m.includes('retoqu')) return 'crecimiento';
+  if (m.includes('crecimiento')||m.includes('raiz')||m.includes('raices')||m.includes('retoque')) return 'crecimiento';
   if (m.includes('onda')||m.includes('rizo')||m.includes('permanente')) return 'ondas';
-  if (m.includes('pre aclar')||m.includes('preaclar')||m.includes('super aclar')) return 'pre_aclaracion';
+  if (m.includes('pre aclar')||m.includes('preaclar')||m.includes('super aclar')||m.includes('aclaracion')) return 'pre_aclaracion';
   if (m.includes('tinte')||m.includes('color')) return 'asesoria_color';
   return null;
 }
-
-// ═══ MENSAJES POR SERVICIO ═══
-const BIENVENIDA = {
-  corte: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en nuestro servicio de *Corte & Blower* ✂️\nQueremos darte la mejor asesoría personalizada 😊',
-  balayage: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en nuestro servicio de *Diseño de Color / Balayage* 🎨\nQueremos darte la mejor asesoría personalizada 😊',
-  novia: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en nuestro servicio de *Novia* 💍\nQueremos que ese día estés absolutamente radiante 💛',
-  terapias: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en nuestras *Terapias Capilares* 💆‍♀️\nQueremos darte la mejor asesoría personalizada 😊',
-  asesoria_color: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en nuestra *Asesoría de Color* 🎨\nQueremos ayudarte a encontrar el color perfecto para ti 😊',
-  tonalizado: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en nuestro servicio de *Tonalizado* ✨\nQueremos darte la mejor asesoría personalizada 😊',
-  extraccion: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en *Extracción de Color* 🎭\nQueremos darte la mejor asesoría personalizada 😊',
-  crecimiento: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en *Crecimiento Preaclarado* 🌱\nQueremos darte la mejor asesoría personalizada 😊',
-  ondas: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en nuestro servicio de *Ondas* 🌊\nQueremos darte la mejor asesoría personalizada 😊',
-  pre_aclaracion: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nVimos que estás interesada en *Pre Aclaración / Super Aclaración* ⚡\nQueremos darte la mejor asesoría personalizada 😊',
-};
-
-const PREGUNTA_QUIMICOS = 'Cariño, ¿tienes algún proceso químico anterior en tu cabello? Por ejemplo alisado, decoloración, tinte u otro tratamiento.\n\nSi es así, ¿nos podrías indicar cuál o cuáles y hace cuánto tiempo? 😊';
-const PREGUNTA_FOTO = 'Muchas gracias por contarnos, hermosa ✨ Esa información nos ayuda muchísimo.\n\nAhora necesitamos una *foto de espalda de tu cabello* con buena iluminación 📸\n\nTe enviamos una imagen de referencia para guiarte 💛';
-const PREGUNTA_FOTO_NOVIA = 'Preciosa, para asesorarte mejor necesitamos una *foto de tu rostro* con buena iluminación 📸\n\nAsí nuestro equipo puede recomendarte el mejor estilo para ese día tan especial 💛';
-const PREGUNTA_NOMBRE = '¡Hermosa foto! ✨ Ya la recibimos, cariño.\n\n¿Cuál es tu nombre? 😊';
-
-const MENU_GENERAL = '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\n\n¿En cuál de nuestros servicios podemos ayudarte hoy?\n\n✂️ Corte & Blower\n✨ Balayage / Diseño de Color\n💆 Terapias Capilares\n💍 Novia\n🎨 Asesoría de Color\n🌈 Tonalizado\n🌱 Crecimiento Preaclarado\n🌊 Ondas\n⚡ Super Aclaración\n🎭 Extracción de Color\n\nEscríbenos el servicio que te interesa 💛';
 
 async function detectWithGroq(msg) {
   try {
     const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       max_tokens: 15,
-      messages: [{ role: 'user', content: `Clasifica este mensaje en UNA categoria: corte, balayage, novia, terapias, asesoria_color, tonalizado, extraccion, crecimiento, ondas, pre_aclaracion, otro. Mensaje: "${msg}". Responde SOLO la categoria.` }]
+      messages: [{ role: 'user', content: `Eres un clasificador de servicios de salon de belleza. Clasifica este mensaje en UNA categoria: corte, balayage, novia, terapias, asesoria_color, tonalizado, extraccion, crecimiento, ondas, pre_aclaracion, otro. Mensaje: "${msg}". Responde SOLO la categoria, sin explicacion.` }]
     }, { headers: { 'Authorization': 'Bearer ' + GROQ_KEY, 'Content-Type': 'application/json' } });
     const r = res.data.choices[0].message.content.trim().toLowerCase();
     return r === 'otro' ? null : r;
   } catch(e) { return null; }
 }
 
-// ═══ PROCESADOR DE MENSAJES ═══
+// ═══ MENSAJES ═══
+const BIENVENIDA = {
+  corte: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu servicio de *Corte & Blower* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+  balayage: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu *Diseño de Color* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+  novia: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nQueremos que ese día estés absolutamente radiante 💍\n\nSerá un placer acompañarte en este día tan especial 💛',
+  terapias: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tus *Terapias Capilares* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+  asesoria_color: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer ayudarte a encontrar el color perfecto para ti 💛\n\nQueremos darte la mejor asesoría de color 😊',
+  tonalizado: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu *Tonalizado* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+  extraccion: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu *Extracción de Color* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+  crecimiento: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu *Crecimiento Preaclarado* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+  ondas: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu servicio de *Ondas* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+  pre_aclaracion: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu *Pre Aclaración* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
+};
+
+const PREGUNTA_QUIMICOS = 'Cariño, ¿tienes algún proceso químico anterior en tu cabello? Por ejemplo alisado, decoloración, tinte u otro tratamiento.\n\nSi es así, ¿nos podrías indicar cuál o cuáles y hace cuánto tiempo? 😊';
+const PREGUNTA_FOTO = 'Muchas gracias por contarnos, hermosa ✨\n\nAhora necesitamos una *foto de espalda de tu cabello* con buena iluminación 📸\n\nTe enviamos una imagen de referencia para guiarte 💛';
+const PREGUNTA_FOTO_NOVIA = 'Preciosa, para asesorarte mejor necesitamos una *foto de tu rostro* con buena iluminación 📸\n\nAsí nuestro equipo puede recomendarte el mejor estilo para ese día tan especial 💛';
+const PREGUNTA_NOMBRE = '¡Hermosa foto! ✨ Ya la recibimos, cariño.\n\n¿Cuál es tu nombre? 😊';
+
+// ═══ PROCESADOR ═══
 async function procesarMensaje(jid, texto, hasImage) {
   if (!sessions[jid]) sessions[jid] = { paso: 'inicio' };
   const s = sessions[jid];
 
-  // FAQ rapido
+  // FAQ rapido - responde siempre sin romper el flujo
   const m = norm(texto);
-  if (m.includes('precio')||m.includes('cuanto cuesta')||m.includes('valor')||m.includes('cuanto vale')) {
-    await sock.sendMessage(jid, { text: 'Nuestros precios varían según el servicio y el largo del cabello 💛\n\nAlgunos ejemplos:\n✂️ Corte & Blower: desde $70.000\n✨ Tonalizado: $60.000\n💆 Terapias: desde $5.000\n\n¿Te gustaría que una asesora te cotice personalmente? 😊' });
+  if (s.paso !== 'nombre' && (m.includes('precio')||m.includes('cuanto cuesta')||m.includes('valor')||m.includes('cuanto vale'))) {
+    await sock.sendMessage(jid, { text: 'Nuestros precios varían según el servicio y el largo del cabello 💛\n\nUna de nuestras asesoras te cotizará personalmente con mucho gusto 😊\n\n¿Seguimos con tu asesoría?' });
     return;
   }
-  if (m.includes('horario')||m.includes('hora')||m.includes('atienden')) {
-    await sock.sendMessage(jid, { text: 'Atendemos 💛\n\nLunes a Viernes: 10:00am – 8:00pm\nSábados: 10:00am – 7:00pm\n\nNo tenemos servicio domingos ni festivos 😊' });
+  if (s.paso !== 'nombre' && (m.includes('horario')||m.includes('que hora')||m.includes('atienden'))) {
+    await sock.sendMessage(jid, { text: 'Atendemos con mucho cariño 💛\n\nLunes a Viernes: 10:00am – 8:00pm\nSábados: 10:00am – 7:00pm' });
     return;
   }
-  if (m.includes('direcci')||m.includes('ubicaci')||m.includes('donde')) {
-    await sock.sendMessage(jid, { text: 'Estamos en 📍\n\n*Calle 5 # 56-26 Local 14*\nCañaveralejo Mall, Cali\n\n¡Te esperamos, hermosa! 💛' });
+  if (s.paso !== 'nombre' && (m.includes('direcci')||m.includes('ubicaci')||m.includes('donde estan')||m.includes('donde quedan'))) {
+    await sock.sendMessage(jid, { text: 'Nos encuentras en 📍\n\n*Calle 5 # 56-26 Local 14*\nCañaveralejo Mall, Cali\n\n¡Te esperamos, hermosa! 💛' });
     return;
   }
 
-  // FLUJO PRINCIPAL
   if (s.paso === 'inicio') {
-    let servicio = detectService(texto);
+    // Primero chequear si viene de pauta (texto exacto)
+    const textoNorm = norm(texto).trim().replace(/\s+/g,'_');
+    let servicio = PAUTAS[textoNorm] || PAUTAS[norm(texto).trim()] || null;
+    
+    // Si no es pauta, detectar por palabras clave
+    if (!servicio) servicio = detectService(texto);
+    
+    // Si tampoco, usar Groq
     if (!servicio && texto.length > 2) servicio = await detectWithGroq(texto);
+
     if (!servicio) {
-      await sock.sendMessage(jid, { text: MENU_GENERAL });
+      await sock.sendMessage(jid, { text: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\n\nSerá un placer atenderte 💛\n\n¿En qué servicio podemos ayudarte hoy? Cuéntanos 😊' });
       return;
     }
+
     s.servicio = servicio;
     s.paso = servicio === 'novia' ? 'foto' : 'quimicos';
     await sock.sendMessage(jid, { text: BIENVENIDA[servicio] || BIENVENIDA.corte });
@@ -152,7 +179,7 @@ async function conectar() {
     if (connection === 'close') {
       const r = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
       if (r) { console.log('🔄 Reconectando...'); setTimeout(conectar, 3000); }
-    } else if (connection === 'open') { ultimoQR = null; console.log('✅ Bot Glam Color Studio conectado'); }
+    } else if (connection === 'open') { ultimoQR = null; console.log('✅ Bot Glam conectado'); }
   });
   sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
@@ -179,8 +206,8 @@ app.get('/qr', async (req, res) => {
   try {
     const img = await qrcode.toDataURL(ultimoQR);
     res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="30"><title>QR Glam Bot</title></head>
-<body style="background:#1A1410;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;">
-<h2 style="color:#C9A96E;margin-bottom:1rem;">Glam Color Studio — Escanea con WhatsApp</h2>
+<body style="background:#1A1410;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:2rem;">
+<h2 style="color:#C9A96E;margin-bottom:1rem;">Glam Color Studio · Escanea con WhatsApp</h2>
 <img src="${img}" style="width:300px;border-radius:12px;border:6px solid #C9A96E"/>
 <p style="color:#888;margin-top:1rem;font-size:13px;">WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
 <p style="color:#555;font-size:11px;margin-top:.5rem;">Se actualiza cada 30 segundos</p>
