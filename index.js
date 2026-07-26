@@ -4,6 +4,7 @@ const axios = require('axios');
 const express = require('express');
 const qrcode = require('qrcode');
 const pino = require('pino');
+const { sendImage } = require('./whatsapp');
 
 const GROQ_KEY = process.env.GROQ_KEY || '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';
 const LIDER_NUM = process.env.LIDER_NUM || '573052297432@s.whatsapp.net';
@@ -11,6 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 let sock;
 let ultimoQR = null;
+let connectionStatus = 'disconnected';
 const sessions = {};
 
 function norm(s){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
@@ -134,15 +136,7 @@ async function procesarMensaje(jid, texto, hasImage) {
     await sock.sendMessage(jid, { text: 'Muchas gracias por contarnos, hermosa ✨' });
     await new Promise(r => setTimeout(r, 1000));
     await sock.sendMessage(jid, { text: PREGUNTA_FOTO });
-    try {
-      const { default: fetch } = await import('node-fetch').catch(() => ({ default: null }));
-      const imgResp = await axios.get(REF_FOTO_URL, { responseType: 'arraybuffer' });
-      await sock.sendMessage(jid, {
-        image: Buffer.from(imgResp.data),
-        mimetype: 'image/jpeg',
-        caption: 'Así necesitamos la foto: de espalda, buena iluminación ✨'
-      });
-    } catch(e) { console.log('Error enviando foto ref:', e.message); }
+    await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, 'Así necesitamos la foto: de espalda, buena iluminación ✨');
     return;
   }
 
@@ -187,8 +181,8 @@ async function conectar() {
     if (qr) { ultimoQR = qr; console.log('📱 QR listo — visita /qr'); }
     if (connection === 'close') {
       const r = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (r) { console.log('🔄 Reconectando...'); setTimeout(conectar, 3000); }
-    } else if (connection === 'open') { ultimoQR = null; console.log('✅ Bot Glam conectado'); }
+      connectionStatus = 'disconnected'; if (r) { console.log('🔄 Reconectando...'); setTimeout(conectar, 3000); }
+    } else if (connection === 'open') { ultimoQR = null; connectionStatus = 'connected'; console.log('✅ Bot Glam conectado'); }
   });
   sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
