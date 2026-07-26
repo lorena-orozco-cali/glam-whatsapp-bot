@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const axios = require('axios');
 const express = require('express');
@@ -143,9 +143,26 @@ async function procesarMensaje(jid, texto, hasImage) {
 
   if (s.paso === 'foto') {
     if (hasImage) {
-      s.foto = true;
-      s.paso = 'nombre';
-      await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
+      await sock.sendMessage(jid, { text: 'Un momento, hermosa... estamos revisando tu foto ✨' });
+      try {
+        // Download and analyze the image
+        const imgMsg = msg.message.imageMessage;
+        const stream = await downloadMediaMessage(msg, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage });
+        const mimetype = msg.message?.imageMessage?.mimetype || 'image/jpeg';
+        const esValida = await analizarFotoCabello(stream, mimetype);
+        if (esValida) {
+          s.foto = true;
+          s.paso = 'nombre';
+          await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
+        } else {
+          await sock.sendMessage(jid, { text: 'Preciosa, necesitamos una foto de *espalda* donde se vea claramente el largo de tu cabello con buena iluminación 📸\n\nPor favor envíanos una nueva foto siguiendo la imagen de referencia que te compartimos 💛' });
+        }
+      } catch(e) {
+        console.log('Error procesando imagen:', e.message);
+        s.foto = true;
+        s.paso = 'nombre';
+        await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
+      }
     } else {
       await sock.sendMessage(jid, { text: 'Preciosa, necesitamos la foto de tu cabello para continuar. Por favor envíala cuando puedas 📸' });
     }
