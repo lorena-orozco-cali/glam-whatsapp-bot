@@ -256,17 +256,6 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
 
 // ═══ BAILEYS ═══
 async function conectar() {
-  // Si RESET_SESSION=true, borra la sesión guardada para forzar un QR nuevo
-  // (necesario cuando se desvinculó el dispositivo desde el celular)
-  if (process.env.RESET_SESSION === 'true') {
-    try {
-      fs.rmSync('auth_info', { recursive: true, force: true });
-      console.log('🗑️ Sesión anterior borrada — se generará un QR nuevo');
-    } catch (e) {
-      console.log('No había sesión previa para borrar:', e.message);
-    }
-  }
-
   const { state, saveCreds } = await useMultiFileAuthState('auth_info');
   sock = makeWASocket({ auth: state, printQRInTerminal: true, logger: pino({ level: 'silent' }) });
   sock.ev.on('creds.update', saveCreds);
@@ -290,6 +279,20 @@ async function conectar() {
       catch(e) { console.log('Error:', e.message); }
     }
   });
+}
+
+// Si RESET_SESSION=true, borra la sesión guardada UNA SOLA VEZ al arrancar
+// (necesario cuando se desvinculó el dispositivo desde el celular)
+// IMPORTANTE: esto se ejecuta solo aquí, no dentro de conectar(), para que
+// los reintentos de reconexión no borren el QR recién generado antes de que
+// alcances a escanearlo.
+if (process.env.RESET_SESSION === 'true') {
+  try {
+    fs.rmSync('auth_info', { recursive: true, force: true });
+    console.log('🗑️ Sesión anterior borrada — se generará un QR nuevo');
+  } catch (e) {
+    console.log('No había sesión previa para borrar:', e.message);
+  }
 }
 
 conectar();
