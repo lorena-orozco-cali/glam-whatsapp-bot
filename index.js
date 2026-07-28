@@ -141,10 +141,16 @@ const BIENVENIDA = {
   pre_aclaracion: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu *Pre Aclaración* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
 };
 
-const PREGUNTA_QUIMICOS = 'Cariño, ¿tienes algún proceso químico anterior en tu cabello? Por ejemplo alisado, decoloración, tinte u otro tratamiento.\n\nSi es así, ¿nos podrías indicar cuál o cuáles y hace cuánto tiempo? 😊';
-const PREGUNTA_FOTO = 'Muchas gracias por contarnos, hermosa ✨\n\nAhora necesitamos una *foto de espalda de tu cabello* con buena iluminación 📸\n\nTe enviamos una imagen de referencia para guiarte 💛';
+const GREET_1 = 'Bienvenida a Glam Color Studio ✨🤍';
+const GREET_2 = '¿En que procedimiento estás interesada en realizarte hermosa ?✨🤍';
+
+const CONFIRMA_INTERES = '🤙 Entiendo hermosa. si estás interesada en nuestros procesos.\n\n✅ Primero debemos generar una pre-asesoría para:\n\nEstablecer un presupuesto y determinar la técnica a realizar en tu cabello.';
+const CONFIRMA_INTERES_2 = '👉 Asi que, te comparto la siguiente información, para que juntos podamos dar el primer paso hacia tu cambio de look . 😊';
+
+const PIDE_FOTO = 'Para adelantar una asesoría y poder generar el presupuesto de tu proceso, debemos evaluar los siguientes factores de tu fibra capilar:\n\n✅ Largo y abundante .\n\n✅ Textura natural .\n\n✅ Procesos químicos anteriores .\n\n🤙 Así que, ¿ Podrías por favor , enviarnos una foto de espalda, dónde se vea muy bien tu cabello 😊?';
 const PREGUNTA_FOTO_NOVIA = 'Preciosa, para asesorarte mejor necesitamos una *foto de tu rostro* con buena iluminación 📸\n\nAsí nuestro equipo puede recomendarte el mejor estilo para ese día tan especial 💛';
-const PREGUNTA_NOMBRE = '¡Hermosa foto! ✨ Ya la recibimos, cariño.\n\n¿Cuál es tu nombre? 😊';
+
+const AGRADECE_Y_QUIMICOS = 'Muchas gracias hermosa por enviar tu foto ✨\n\nQuisiera realizarte una pregunta para poder continuar con la asesoría.\n\n👆 ¿ Tienes algún proceso químico aplicado en el cabello ?\n\nDe ser así , ¿ cuando fue la última vez que lo realizaste y cuál fue ?';
 
 // ═══ PROCESADOR ═══
 // NOTA: se agrega el parámetro `msg` (el mensaje original de Baileys) porque
@@ -152,18 +158,19 @@ const PREGUNTA_NOMBRE = '¡Hermosa foto! ✨ Ya la recibimos, cariño.\n\n¿Cuá
 async function procesarMensaje(jid, texto, hasImage, msg) {
   if (!sessions[jid]) sessions[jid] = { paso: 'inicio' };
   const s = sessions[jid];
+  s.lastActivity = Date.now();
 
   // FAQ rapido - responde siempre sin romper el flujo
   const m = norm(texto);
-  if (s.paso !== 'nombre' && (m.includes('precio')||m.includes('cuanto cuesta')||m.includes('valor')||m.includes('cuanto vale'))) {
+  if (s.paso !== 'fin' && (m.includes('precio')||m.includes('cuanto cuesta')||m.includes('valor')||m.includes('cuanto vale'))) {
     await sock.sendMessage(jid, { text: 'Nuestros precios varían según el servicio y el largo del cabello 💛\n\nUna de nuestras asesoras te cotizará personalmente con mucho gusto 😊\n\n¿Seguimos con tu asesoría?' });
     return;
   }
-  if (s.paso !== 'nombre' && (m.includes('horario')||m.includes('que hora')||m.includes('atienden'))) {
+  if (s.paso !== 'fin' && (m.includes('horario')||m.includes('que hora')||m.includes('atienden'))) {
     await sock.sendMessage(jid, { text: 'Atendemos con mucho cariño 💛\n\nLunes a Viernes: 10:00am – 8:00pm\nSábados: 10:00am – 7:00pm' });
     return;
   }
-  if (s.paso !== 'nombre' && (m.includes('direcci')||m.includes('ubicaci')||m.includes('donde estan')||m.includes('donde quedan'))) {
+  if (s.paso !== 'fin' && (m.includes('direcci')||m.includes('ubicaci')||m.includes('donde estan')||m.includes('donde quedan'))) {
     await sock.sendMessage(jid, { text: 'Nos encuentras en 📍\n\n*Calle 5 # 56-26 Local 14*\nCañaveralejo Mall, Cali\n\n¡Te esperamos, hermosa! 💛' });
     return;
   }
@@ -180,25 +187,27 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
     if (!servicio && texto.length > 2) servicio = await detectWithGroq(texto);
 
     if (!servicio) {
-      await sock.sendMessage(jid, { text: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\n\nSerá un placer atenderte 💛\n\n¿En qué servicio podemos ayudarte hoy? Cuéntanos 😊' });
+      await sock.sendMessage(jid, { text: GREET_1 });
+      await new Promise(r => setTimeout(r, 800));
+      await sock.sendMessage(jid, { text: GREET_2 });
       return;
     }
 
     s.servicio = servicio;
-    s.paso = servicio === 'novia' ? 'foto' : 'quimicos';
-    await sock.sendMessage(jid, { text: BIENVENIDA[servicio] || BIENVENIDA.corte });
-    await new Promise(r => setTimeout(r, 1500));
-    await sock.sendMessage(jid, { text: servicio === 'novia' ? PREGUNTA_FOTO_NOVIA : PREGUNTA_QUIMICOS });
-    return;
-  }
 
-  if (s.paso === 'quimicos') {
-    s.quimicos = texto;
+    if (servicio === 'novia') {
+      s.paso = 'foto';
+      await sock.sendMessage(jid, { text: PREGUNTA_FOTO_NOVIA });
+      return;
+    }
+
     s.paso = 'foto';
-    await sock.sendMessage(jid, { text: 'Muchas gracias por contarnos, hermosa ✨' });
+    await sock.sendMessage(jid, { text: CONFIRMA_INTERES });
+    await new Promise(r => setTimeout(r, 1200));
+    await sock.sendMessage(jid, { text: CONFIRMA_INTERES_2 });
+    await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, '');
     await new Promise(r => setTimeout(r, 1000));
-    await sock.sendMessage(jid, { text: PREGUNTA_FOTO });
-    await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, 'Así necesitamos la foto: de espalda, buena iluminación ✨');
+    await sock.sendMessage(jid, { text: PIDE_FOTO });
     return;
   }
 
@@ -210,8 +219,11 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
         const esValida = await analizarFotoCabello(stream);
         if (esValida) {
           s.foto = true;
-          s.paso = 'nombre';
-          await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
+          s.paso = 'fin';
+          s.lastActivity = Date.now();
+          if (s.servicio !== 'novia') {
+            await sock.sendMessage(jid, { text: AGRADECE_Y_QUIMICOS });
+          }
         } else {
           if (!s.foto_intentos) s.foto_intentos = 0;
           s.foto_intentos++;
@@ -220,16 +232,22 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
           // Después de 3 intentos fallidos, dejamos pasar para no frustrar a la clienta
           if (s.foto_intentos >= 3) {
             s.foto = true;
-            s.paso = 'nombre';
+            s.paso = 'fin';
+            s.lastActivity = Date.now();
             await sock.sendMessage(jid, { text: 'No te preocupes, hermosa, seguimos con tu asesoría 💛' });
-            await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
+            if (s.servicio !== 'novia') {
+              await sock.sendMessage(jid, { text: AGRADECE_Y_QUIMICOS });
+            }
           }
         }
       } catch(e) {
         console.log('Error analizando foto:', e.message);
         s.foto = true;
-        s.paso = 'nombre';
-        await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
+        s.paso = 'fin';
+        s.lastActivity = Date.now();
+        if (s.servicio !== 'novia') {
+          await sock.sendMessage(jid, { text: AGRADECE_Y_QUIMICOS });
+        }
       }
     } else {
       await sock.sendMessage(jid, { text: 'Preciosa, necesitamos la foto de tu cabello para continuar. Por favor envíala cuando puedas 📸' });
@@ -237,26 +255,31 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
     return;
   }
 
-  if (s.paso === 'nombre') {
-    let nombre = texto.trim().split(' ')[0];
-    nombre = nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
-    s.nombre = nombre;
-    s.paso = 'fin';
-    await sock.sendMessage(jid, { text: `¡*${nombre}*, muchas gracias por confiar en nosotros! 💛\n\nYa tenemos toda tu información.` });
-    await new Promise(r => setTimeout(r, 1000));
-    await sock.sendMessage(jid, { text: 'En breve una de nuestras asesoras te contactará personalmente para acompañarte y agendar tu cita ✨' });
-    try {
-      await sock.sendMessage(LIDER_NUM, {
-        text: `NUEVA CLIENTA INTERESADA EN GLAM\n\n*Nombre:* ${nombre}\n*Servicio:* ${s.servicio}\n*Procesos químicos:* ${s.quimicos || 'Ninguno'}\n*Número:* ${jid.replace('@s.whatsapp.net','')}`
-      });
-    } catch(e) { console.log('Error notificando lider:', e.message); }
+  // paso 'fin': el bot ya no responde nada mas — la administradora toma la conversacion
+  if (s.paso === 'fin') {
     return;
   }
-
-  if (s.paso === 'fin') {
-    await sock.sendMessage(jid, { text: 'Gracias por escribirnos, preciosa ✨ Una asesora te contactará muy pronto 💛' });
-  }
 }
+
+// ═══ ALERTA DE INACTIVIDAD (más de 10 horas sin actividad tras terminar el flujo) ═══
+const HORAS_INACTIVIDAD = 10;
+setInterval(async () => {
+  if (connectionStatus !== 'connected') return;
+  const limite = HORAS_INACTIVIDAD * 60 * 60 * 1000;
+  for (const [jid, s] of Object.entries(sessions)) {
+    if (s.paso === 'fin' && !s.alertaInactividadEnviada && s.lastActivity && (Date.now() - s.lastActivity > limite)) {
+      s.alertaInactividadEnviada = true;
+      try {
+        await sock.sendMessage(LIDER_NUM, {
+          text: `⏰ *Alerta de inactividad*\n\nLa clienta *${jid.replace('@s.whatsapp.net','')}* lleva más de ${HORAS_INACTIVIDAD} horas sin actividad tras su última respuesta.\n\n*Servicio:* ${s.servicio || 'No detectado'}\n\nPor favor revisa el chat y dale seguimiento 💛`
+        });
+        console.log(`⏰ Alerta de inactividad enviada para ${jid}`);
+      } catch (e) {
+        console.log('Error enviando alerta de inactividad:', e.message);
+      }
+    }
+  }
+}, 15 * 60 * 1000);
 
 // ═══ BAILEYS ═══
 async function conectar() {
