@@ -262,7 +262,10 @@ async function conectar() {
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) { ultimoQR = qr; console.log('📱 QR listo — visita /qr'); }
     if (connection === 'close') {
-      const r = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+      const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+      const razon = (lastDisconnect?.error)?.message || 'desconocida';
+      console.log(`❌ Conexión cerrada — código: ${statusCode} — razón: ${razon}`);
+      const r = statusCode !== DisconnectReason.loggedOut;
       connectionStatus = 'disconnected'; if (r) { console.log('🔄 Reconectando...'); setTimeout(conectar, 3000); }
     } else if (connection === 'open') { ultimoQR = null; connectionStatus = 'connected'; console.log('✅ Bot Glam conectado'); }
   });
