@@ -10,7 +10,6 @@ const qrcode = require('qrcode');
 const pino = require('pino');
 const fs = require('fs');
 const { sendImage } = require('./whatsapp');
-const { generarTarjetaCumple } = require('./tarjeta');
 
 const GROQ_KEY = process.env.GROQ_KEY || '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';
 const GOOGLE_VISION_KEY = process.env.GOOGLE_VISION_KEY || '';
@@ -330,7 +329,7 @@ app.post('/enviar-alerta', async (req, res) => {
     return res.status(503).json({ ok: false, error: 'Bot de WhatsApp no está conectado' });
   }
 
-  const { numero, mensaje, imagenBase64, imagenUrl, nombreTarjeta } = req.body || {};
+  const { numero, mensaje, imagenBase64, imagenUrl } = req.body || {};
   if (!numero || !mensaje) {
     return res.status(400).json({ ok: false, error: 'Faltan campos: numero y mensaje son obligatorios' });
   }
@@ -338,11 +337,7 @@ app.post('/enviar-alerta', async (req, res) => {
   const jid = numeroToJid(numero);
 
   try {
-    if (nombreTarjeta) {
-      // Genera la tarjeta de cumpleaños con el nombre superpuesto (fuente cursiva, centrado)
-      const tarjeta = await generarTarjetaCumple(nombreTarjeta);
-      await sock.sendMessage(jid, { image: tarjeta, caption: mensaje });
-    } else if (imagenBase64) {
+    if (imagenBase64) {
       const buffer = Buffer.from(imagenBase64, 'base64');
       await sock.sendMessage(jid, { image: buffer, caption: mensaje });
     } else if (imagenUrl) {
