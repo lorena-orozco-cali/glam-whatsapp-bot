@@ -144,10 +144,10 @@ const BIENVENIDA = {
 const GREET_1 = 'Bienvenida a Glam Color Studio ✨🤍';
 const GREET_2 = '¿En que procedimiento estás interesada en realizarte hermosa ?✨🤍';
 
-const CONFIRMA_INTERES = '🤙 Entiendo hermosa. si estás interesada en nuestros procesos.\n\n✅ Primero debemos generar una pre-asesoría para:\n\nEstablecer un presupuesto y determinar la técnica a realizar en tu cabello.';
+const CONFIRMA_INTERES = '👉 Entiendo hermosa. si estás interesada en nuestros procesos.\n\n✅ Primero debemos generar una pre-asesoría para:\n\nEstablecer un presupuesto y determinar la técnica a realizar en tu cabello.';
 const CONFIRMA_INTERES_2 = '👉 Asi que, te comparto la siguiente información, para que juntos podamos dar el primer paso hacia tu cambio de look . 😊';
 
-const PIDE_FOTO = 'Para adelantar una asesoría y poder generar el presupuesto de tu proceso, debemos evaluar los siguientes factores de tu fibra capilar:\n\n✅ Largo y abundante .\n\n✅ Textura natural .\n\n✅ Procesos químicos anteriores .\n\n🤙 Así que, ¿ Podrías por favor , enviarnos una foto de espalda, dónde se vea muy bien tu cabello 😊?';
+const PIDE_FOTO = 'Para adelantar una asesoría y poder generar el presupuesto de tu proceso, debemos evaluar los siguientes factores de tu fibra capilar:\n\n✅ Largo y abundante .\n\n✅ Textura natural .\n\n✅ Procesos químicos anteriores .\n\n👉 Así que, ¿ Podrías por favor , enviarnos una foto de espalda, dónde se vea muy bien tu cabello 😊?';
 const PREGUNTA_FOTO_NOVIA = 'Preciosa, para asesorarte mejor necesitamos una *foto de tu rostro* con buena iluminación 📸\n\nAsí nuestro equipo puede recomendarte el mejor estilo para ese día tan especial 💛';
 
 const AGRADECE_Y_QUIMICOS = 'Muchas gracias hermosa por enviar tu foto ✨\n\nQuisiera realizarte una pregunta para poder continuar con la asesoría.\n\n👆 ¿ Tienes algún proceso químico aplicado en el cabello ?\n\nDe ser así , ¿ cuando fue la última vez que lo realizaste y cuál fue ?';
@@ -162,6 +162,26 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
 
   // FAQ rapido - responde siempre sin romper el flujo
   const m = norm(texto);
+
+  // ═══ DETECCION DE CITA DIRECTA ═══
+  // Si la clienta ya sabe que quiere agendar (dice "cita" + un servicio especifico),
+  // no seguimos el flujo normal (foto/quimicos) — se pasa directo a Karen.
+  if (s.paso !== 'fin' && m.includes('cita')) {
+    let servicioCita = detectService(texto);
+    if (!servicioCita && texto.length > 2) servicioCita = await detectWithGroq(texto);
+    if (servicioCita) {
+      s.paso = 'fin';
+      s.servicio = servicioCita;
+      s.lastActivity = Date.now();
+      await sock.sendMessage(jid, { text: 'Claro que si hermosa' });
+      try {
+        await sock.sendMessage(LIDER_NUM, {
+          text: `📅 *Cita directa solicitada*\n\n*Cliente:* ${jid.replace('@s.whatsapp.net','')}\n*Servicio:* ${servicioCita}\n*Mensaje:* ${texto}\n\nPor favor agenda directamente 💛`
+        });
+      } catch(e) { console.log('Error notificando cita directa:', e.message); }
+      return;
+    }
+  }
   if (s.paso !== 'fin' && (m.includes('precio')||m.includes('cuanto cuesta')||m.includes('valor')||m.includes('cuanto vale'))) {
     await sock.sendMessage(jid, { text: 'Nuestros precios varían según el servicio y el largo del cabello 💛\n\nUna de nuestras asesoras te cotizará personalmente con mucho gusto 😊\n\n¿Seguimos con tu asesoría?' });
     return;
@@ -213,7 +233,7 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
 
   if (s.paso === 'foto') {
     if (hasImage) {
-      await sock.sendMessage(jid, { text: 'Un momento, hermosa... revisando tu foto ✨' });
+      await sock.sendMessage(jid, { text: '👉 Un momento estamos revisando tu foto' });
       try {
         const stream = await downloadMediaMessage(msg, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage });
         const esValida = await analizarFotoCabello(stream);
@@ -227,7 +247,7 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
         } else {
           if (!s.foto_intentos) s.foto_intentos = 0;
           s.foto_intentos++;
-          await sock.sendMessage(jid, { text: 'Preciosa, necesitamos una foto de *espalda* donde se vea claramente el *largo y color* de tu cabello con buena iluminación 📸\n\nSigue la imagen de referencia que te compartimos 💛' });
+          await sock.sendMessage(jid, { text: 'Preciosa, necesitamos una foto de espalda donde se vea claramente el largo de tu cabello 👉' });
           await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, 'Así debe verse la foto ✨');
           // Después de 3 intentos fallidos, dejamos pasar para no frustrar a la clienta
           if (s.foto_intentos >= 3) {
