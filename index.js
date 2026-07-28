@@ -4,6 +4,7 @@ const axios = require('axios');
 const express = require('express');
 const qrcode = require('qrcode');
 const pino = require('pino');
+const fs = require('fs');
 const { sendImage } = require('./whatsapp');
 
 const GROQ_KEY = process.env.GROQ_KEY || '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';
@@ -255,6 +256,17 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
 
 // ═══ BAILEYS ═══
 async function conectar() {
+  // Si RESET_SESSION=true, borra la sesión guardada para forzar un QR nuevo
+  // (necesario cuando se desvinculó el dispositivo desde el celular)
+  if (process.env.RESET_SESSION === 'true') {
+    try {
+      fs.rmSync('auth_info', { recursive: true, force: true });
+      console.log('🗑️ Sesión anterior borrada — se generará un QR nuevo');
+    } catch (e) {
+      console.log('No había sesión previa para borrar:', e.message);
+    }
+  }
+
   const { state, saveCreds } = await useMultiFileAuthState('auth_info');
   sock = makeWASocket({ auth: state, printQRInTerminal: true, logger: pino({ level: 'silent' }) });
   sock.ev.on('creds.update', saveCreds);
