@@ -10,7 +10,15 @@ const GROQ_KEY = process.env.GROQ_KEY || 'gsk_F7etKeSdB0Je1wkjonMGWGdyb3FYgOZ6u1
 const GOOGLE_VISION_KEY = process.env.GOOGLE_VISION_KEY || '';
 const LIDER_NUM = process.env.LIDER_NUM || '573052297432@s.whatsapp.net';
 const REF_FOTO_URL = process.env.REF_FOTO_URL || 'https://i.imgur.com/dCDqboi.jpeg';
+const ALERTA_TOKEN = process.env.ALERTA_TOKEN || 'CAMBIA_ESTE_TOKEN';
 const PORT = process.env.PORT || 3000;
+
+// Convierte un numero de celular colombiano a JID de WhatsApp
+function numeroToJid(numero) {
+  let digits = String(numero).replace(/\D/g, '');
+  if (digits.length === 10 && digits.startsWith('3')) digits = '57' + digits;
+  return digits + '@s.whatsapp.net';
+}
 
 let sock;
 let ultimoQR = null;
@@ -276,7 +284,50 @@ conectar();
 
 // ═══ EXPRESS ═══
 const app = express();
+app.use(express.json({ limit: '5mb' }));
+
 app.get('/', (req, res) => res.json({ status: '✅ Glam Color Studio Bot activo', qr: '/qr' }));
+
+// ═══ ENDPOINT PARA N8N ═══
+// n8n llama aquí para disparar cada mensaje/alerta.
+// Body esperado:
+// { "numero": "3001234567", "mensaje": "...", "imagenBase64": "..." }  (opcional imagenBase64)
+// o { "numero": "...", "mensaje": "...", "imagenUrl": "https://..." }  (opcional imagenUrl)
+// Si no viene imagenBase64 ni imagenUrl, se manda solo texto.
+app.post('/enviar-alerta', async (req, res) => {
+  // Seguridad: solo n8n con el token correcto puede llamar este endpoint
+  const auth = req.headers['authorization'] || '';
+  if (auth !== `Bearer ${ALERTA_TOKEN}`) {
+    return res.status(401).json({ ok: false, error: 'Token inválido' });
+  }
+
+  if (connectionStatus !== 'connected') {
+    return res.status(503).json({ ok: false, error: 'Bot de WhatsApp no está conectado' });
+  }
+
+  const { numero, mensaje, imagenBase64, imagenUrl } = req.body || {};
+  if (!numero || !mensaje) {
+    return res.status(400).json({ ok: false, error: 'Faltan campos: numero y mensaje son obligatorios' });
+  }
+
+  const jid = numeroToJid(numero);
+
+  try {
+    if (imagenBase64) {
+      const buffer = Buffer.from(imagenBase64, 'base64');
+      await sock.sendMessage(jid, { image: buffer, caption: mensaje });
+    } else if (imagenUrl) {
+      await sendImage(sock, connectionStatus, jid, imagenUrl, mensaje);
+    } else {
+      await sock.sendMessage(jid, { text: mensaje });
+    }
+    console.log(`✅ Alerta enviada a ${jid}`);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.log('❌ Error enviando alerta:', e.message);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
 app.get('/qr', async (req, res) => {
   if (!ultimoQR) return res.send(`<body style="background:#1A1410;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif"><h2 style="color:#C9A96E">✅ Glam Bot conectado y activo</h2></body>`);
   try {
