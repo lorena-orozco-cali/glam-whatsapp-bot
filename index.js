@@ -2,7 +2,7 @@
 // de Node no está disponible por defecto y causa "crypto is not defined"
 global.crypto = require('crypto').webcrypto;
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const axios = require('axios');
 const express = require('express');
@@ -261,7 +261,9 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
 // ═══ BAILEYS ═══
 async function conectar() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-  sock = makeWASocket({ auth: state, printQRInTerminal: true, logger: pino({ level: 'silent' }) });
+  const { version } = await fetchLatestBaileysVersion();
+  console.log('📶 Usando version de WhatsApp Web:', version.join('.'));
+  sock = makeWASocket({ auth: state, version, printQRInTerminal: true, logger: pino({ level: 'silent' }) });
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) { ultimoQR = qr; console.log('📱 QR listo — visita /qr'); }
@@ -351,7 +353,12 @@ app.post('/enviar-alerta', async (req, res) => {
   }
 });
 app.get('/qr', async (req, res) => {
-  if (!ultimoQR) return res.send(`<body style="background:#1A1410;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif"><h2 style="color:#C9A96E">✅ Glam Bot conectado y activo</h2></body>`);
+  if (connectionStatus === 'connected') {
+    return res.send(`<body style="background:#1A1410;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif"><h2 style="color:#C9A96E">✅ Glam Bot conectado y activo</h2></body>`);
+  }
+  if (!ultimoQR) {
+    return res.send(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="5"></head><body style="background:#1A1410;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif"><h2 style="color:#C9A96E">⏳ Generando QR, espera unos segundos... (se actualiza solo)</h2></body></html>`);
+  }
   try {
     const img = await qrcode.toDataURL(ultimoQR);
     res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="30"><title>QR Glam Bot</title></head>
