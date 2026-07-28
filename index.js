@@ -32,6 +32,17 @@ const sessions = {};
 
 function norm(s){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
+// ═══ DETECCION DE ORIGEN: ¿EL MENSAJE VINO DE UN ANUNCIO (META ADS)? ═══
+// WhatsApp agrega informacion adicional (invisible en el chat) cuando alguien
+// hace clic en un anuncio y escribe. Esa info viene en "externalAdReplyInfo".
+function vieneDeAnuncio(msg) {
+  const ctx = msg.message?.extendedTextMessage?.contextInfo
+    || msg.message?.imageMessage?.contextInfo
+    || msg.message?.videoMessage?.contextInfo
+    || null;
+  return !!(ctx && ctx.externalAdReplyInfo);
+}
+
 // ═══ DETECCION POR PAUTA (texto pre-cargado desde Meta) ═══
 const PAUTAS = {
   'balayage': 'balayage',
@@ -156,9 +167,21 @@ const AGRADECE_Y_QUIMICOS = 'Muchas gracias hermosa por enviar tu foto ✨\n\nQu
 // NOTA: se agrega el parámetro `msg` (el mensaje original de Baileys) porque
 // analizarFotoCabello necesita el objeto completo para downloadMediaMessage.
 async function procesarMensaje(jid, texto, hasImage, msg) {
+  const esNueva = !sessions[jid];
   if (!sessions[jid]) sessions[jid] = { paso: 'inicio' };
   const s = sessions[jid];
   s.lastActivity = Date.now();
+
+  // En el primer mensaje de la conversacion: detectar si vino de un anuncio de Meta
+  // y avisar UNA SOLA VEZ a la administradora que alguien nuevo escribio.
+  if (esNueva) {
+    s.esAnuncio = vieneDeAnuncio(msg);
+    try {
+      await sock.sendMessage(LIDER_NUM, {
+        text: `💬 *Nuevo mensaje recibido*\n\n*Número:* ${jid.replace('@s.whatsapp.net','')}\n*Origen:* ${s.esAnuncio ? 'Vino de un anuncio (Meta Ads)' : 'Mensaje directo, no vino de anuncio'}\n*Mensaje:* ${texto || '(imagen)'}`
+      });
+    } catch(e) { console.log('Error notificando nuevo mensaje:', e.message); }
+  }
 
   // FAQ rapido - responde siempre sin romper el flujo
   const m = norm(texto);
@@ -196,6 +219,11 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
   }
 
   if (s.paso === 'inicio') {
+    // El flujo automatico completo (bienvenida, foto, quimicos) SOLO arranca
+    // si la clienta llego por un anuncio de Meta. Si escribio directo (sin
+    // venir de anuncio), el bot no sigue — ya se avisó a la administradora.
+    if (!s.esAnuncio) return;
+
     // Primero chequear si viene de pauta (texto exacto)
     const textoNorm = norm(texto).trim().replace(/\s+/g,'_');
     let servicio = PAUTAS[textoNorm] || PAUTAS[norm(texto).trim()] || null;
