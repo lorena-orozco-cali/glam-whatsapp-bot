@@ -100,8 +100,14 @@ async function analizarFotoCabello(imageBuffer) {
     console.log('Google Vision labels:', allLabels.join(', '));
 
     const hairWords = ['hair', 'hairstyle', 'long hair', 'black hair', 'brown hair', 'hair coloring', 'hair care', 'blond', 'blonde', 'hair extensions', 'wig', 'step cutting'];
+    const faceWords = ['selfie', 'face', 'chin', 'cheek', 'forehead', 'eyebrow', 'eyelash', 'lips', 'facial expression', 'jaw', 'nose', 'mouth', 'portrait', 'smile'];
+
     const hasHair = hairWords.some(w => allLabels.some(l => l.includes(w)));
-    return hasHair;
+    const hasFace = faceWords.some(w => allLabels.some(l => l.includes(w)));
+
+    // Solo es válida si muestra cabello Y NO muestra rasgos de rostro/selfie
+    // (evita que una selfie de frente pase solo porque también detecta "hairstyle")
+    return hasHair && !hasFace;
   } catch(e) {
     console.log('Error Google Vision:', e.message);
     return true; // si falla el servicio, no bloqueamos a la clienta
