@@ -1,3 +1,7 @@
+// Fix: Baileys necesita "crypto" como variable global — en algunas versiones
+// de Node no está disponible por defecto y causa "crypto is not defined"
+global.crypto = require('crypto').webcrypto;
+
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const axios = require('axios');
