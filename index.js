@@ -7,6 +7,7 @@ const pino = require('pino');
 const { sendImage } = require('./whatsapp');
 
 const GROQ_KEY = process.env.GROQ_KEY || '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';
+const GOOGLE_VISION_KEY = process.env.GOOGLE_VISION_KEY || '';
 const LIDER_NUM = process.env.LIDER_NUM || '573052297432@s.whatsapp.net';
 const REF_FOTO_URL = process.env.REF_FOTO_URL || 'https://i.imgur.com/dCDqboi.jpeg';
 const PORT = process.env.PORT || 3000;
@@ -68,6 +69,45 @@ async function detectWithGroq(msg) {
   } catch(e) { return null; }
 }
 
+// ═══ VALIDACIÓN DE FOTO (Google Vision) ═══
+// Detecta si la imagen muestra cabello (evita que la clienta mande cualquier foto:
+// paisajes, memes, capturas de pantalla, selfies de frente sin cabello visible, etc.)
+async function analizarFotoCabello(imageBuffer) {
+  if (!GOOGLE_VISION_KEY) {
+    console.log('⚠️ GOOGLE_VISION_KEY no configurada — aceptando foto sin validar');
+    return true;
+  }
+  try {
+    const base64 = imageBuffer.toString('base64');
+    const res = await axios.post(
+      'https://vision.googleapis.com/v1/images:annotate?key=' + GOOGLE_VISION_KEY,
+      {
+        requests: [{
+          image: { content: base64 },
+          features: [
+            { type: 'LABEL_DETECTION', maxResults: 15 },
+            { type: 'OBJECT_LOCALIZATION', maxResults: 10 }
+          ]
+        }]
+      }
+    );
+    const labels = res.data.responses[0].labelAnnotations || [];
+    const objects = res.data.responses[0].localizedObjectAnnotations || [];
+    const allLabels = [
+      ...labels.map(l => l.description.toLowerCase()),
+      ...objects.map(o => o.name.toLowerCase())
+    ];
+    console.log('Google Vision labels:', allLabels.join(', '));
+
+    const hairWords = ['hair', 'hairstyle', 'long hair', 'black hair', 'brown hair', 'hair coloring', 'hair care', 'blond', 'blonde', 'hair extensions', 'wig', 'step cutting'];
+    const hasHair = hairWords.some(w => allLabels.some(l => l.includes(w)));
+    return hasHair;
+  } catch(e) {
+    console.log('Error Google Vision:', e.message);
+    return true; // si falla el servicio, no bloqueamos a la clienta
+  }
+}
+
 // ═══ MENSAJES ═══
 const BIENVENIDA = {
   corte: '¡Hola, hermosa! ✨ Bienvenida a *Glam Color Studio*.\nSerá para nosotros un placer acompañarte en tu servicio de *Corte & Blower* 💛\n\nQueremos darte la mejor asesoría personalizada 😊',
@@ -88,7 +128,9 @@ const PREGUNTA_FOTO_NOVIA = 'Preciosa, para asesorarte mejor necesitamos una *fo
 const PREGUNTA_NOMBRE = '¡Hermosa foto! ✨ Ya la recibimos, cariño.\n\n¿Cuál es tu nombre? 😊';
 
 // ═══ PROCESADOR ═══
-async function procesarMensaje(jid, texto, hasImage) {
+// NOTA: se agrega el parámetro `msg` (el mensaje original de Baileys) porque
+// analizarFotoCabello necesita el objeto completo para downloadMediaMessage.
+async function procesarMensaje(jid, texto, hasImage, msg) {
   if (!sessions[jid]) sessions[jid] = { paso: 'inicio' };
   const s = sessions[jid];
 
@@ -111,10 +153,10 @@ async function procesarMensaje(jid, texto, hasImage) {
     // Primero chequear si viene de pauta (texto exacto)
     const textoNorm = norm(texto).trim().replace(/\s+/g,'_');
     let servicio = PAUTAS[textoNorm] || PAUTAS[norm(texto).trim()] || null;
-    
+
     // Si no es pauta, detectar por palabras clave
     if (!servicio) servicio = detectService(texto);
-    
+
     // Si tampoco, usar Groq
     if (!servicio && texto.length > 2) servicio = await detectWithGroq(texto);
 
@@ -152,8 +194,17 @@ async function procesarMensaje(jid, texto, hasImage) {
           s.paso = 'nombre';
           await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
         } else {
+          if (!s.foto_intentos) s.foto_intentos = 0;
+          s.foto_intentos++;
           await sock.sendMessage(jid, { text: 'Preciosa, necesitamos una foto de *espalda* donde se vea claramente el *largo y color* de tu cabello con buena iluminación 📸\n\nSigue la imagen de referencia que te compartimos 💛' });
           await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, 'Así debe verse la foto ✨');
+          // Después de 3 intentos fallidos, dejamos pasar para no frustrar a la clienta
+          if (s.foto_intentos >= 3) {
+            s.foto = true;
+            s.paso = 'nombre';
+            await sock.sendMessage(jid, { text: 'No te preocupes, hermosa, seguimos con tu asesoría 💛' });
+            await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
+          }
         }
       } catch(e) {
         console.log('Error analizando foto:', e.message);
@@ -177,7 +228,7 @@ async function procesarMensaje(jid, texto, hasImage) {
     await sock.sendMessage(jid, { text: 'En breve una de nuestras asesoras te contactará personalmente para acompañarte y agendar tu cita ✨' });
     try {
       await sock.sendMessage(LIDER_NUM, {
-        text: `🔔 *Nueva clienta interesada en Glam!*\n\n*Nombre:* ${nombre}\n*Servicio:* ${s.servicio}\n*Procesos químicos:* ${s.quimicos || 'Ninguno'}\n*Número:* ${jid.replace('@s.whatsapp.net','')}`
+        text: `NUEVA CLIENTA INTERESADA EN GLAM\n\n*Nombre:* ${nombre}\n*Servicio:* ${s.servicio}\n*Procesos químicos:* ${s.quimicos || 'Ninguno'}\n*Número:* ${jid.replace('@s.whatsapp.net','')}`
       });
     } catch(e) { console.log('Error notificando lider:', e.message); }
     return;
@@ -209,7 +260,7 @@ async function conectar() {
       const hasImage = !!(msg.message?.imageMessage);
       if (!texto && !hasImage) continue;
       console.log(`📩 [${jid}]: ${texto}`);
-      try { await procesarMensaje(jid, texto, hasImage); }
+      try { await procesarMensaje(jid, texto, hasImage, msg); }
       catch(e) { console.log('Error:', e.message); }
     }
   });
