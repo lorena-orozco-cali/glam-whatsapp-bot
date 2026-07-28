@@ -143,22 +143,20 @@ async function procesarMensaje(jid, texto, hasImage) {
 
   if (s.paso === 'foto') {
     if (hasImage) {
-      await sock.sendMessage(jid, { text: 'Un momento, hermosa... estamos revisando tu foto ✨' });
+      await sock.sendMessage(jid, { text: 'Un momento, hermosa... revisando tu foto ✨' });
       try {
-        // Download and analyze the image
-        const imgMsg = msg.message.imageMessage;
         const stream = await downloadMediaMessage(msg, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage });
-        const mimetype = msg.message?.imageMessage?.mimetype || 'image/jpeg';
-        const esValida = await analizarFotoCabello(stream, mimetype);
+        const esValida = await analizarFotoCabello(stream);
         if (esValida) {
           s.foto = true;
           s.paso = 'nombre';
           await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
         } else {
-          await sock.sendMessage(jid, { text: 'Preciosa, necesitamos una foto de *espalda* donde se vea claramente el largo de tu cabello con buena iluminación 📸\n\nPor favor envíanos una nueva foto siguiendo la imagen de referencia que te compartimos 💛' });
+          await sock.sendMessage(jid, { text: 'Preciosa, necesitamos una foto de *espalda* donde se vea claramente el *largo y color* de tu cabello con buena iluminación 📸\n\nSigue la imagen de referencia que te compartimos 💛' });
+          await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, 'Así debe verse la foto ✨');
         }
       } catch(e) {
-        console.log('Error procesando imagen:', e.message);
+        console.log('Error analizando foto:', e.message);
         s.foto = true;
         s.paso = 'nombre';
         await sock.sendMessage(jid, { text: PREGUNTA_NOMBRE });
