@@ -173,14 +173,9 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
   s.lastActivity = Date.now();
 
   // En el primer mensaje de la conversacion: detectar si vino de un anuncio de Meta
-  // y avisar UNA SOLA VEZ a la administradora que alguien nuevo escribio.
+  // (se usa para decidir si arranca el flujo automatico, ya no se manda aviso aqui)
   if (esNueva) {
     s.esAnuncio = vieneDeAnuncio(msg);
-    try {
-      await sock.sendMessage(LIDER_NUM, {
-        text: `💬 *Nuevo mensaje recibido*\n\n*Número:* ${jid.replace('@s.whatsapp.net','')}\n*Origen:* ${s.esAnuncio ? 'Vino de un anuncio (Meta Ads)' : 'Mensaje directo, no vino de anuncio'}\n*Mensaje:* ${texto || '(imagen)'}`
-      });
-    } catch(e) { console.log('Error notificando nuevo mensaje:', e.message); }
   }
 
   // FAQ rapido - responde siempre sin romper el flujo
