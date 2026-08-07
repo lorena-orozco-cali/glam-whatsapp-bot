@@ -35,6 +35,11 @@ function norm(s){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036
 // ═══ DETECCION DE ORIGEN: ¿EL MENSAJE VINO DE UN ANUNCIO (META ADS)? ═══
 // WhatsApp agrega informacion adicional (invisible en el chat) cuando alguien
 // hace clic en un anuncio y escribe. Esa info viene en "externalAdReplyInfo".
+// OJO: Meta solo garantiza mandar esta metadata en el PRIMER mensaje del clic.
+// Si el bot se reinicia (Railway redeploy/crash) y pierde la sesion en memoria,
+// el siguiente mensaje de esa misma clienta ya no traera esta metadata aunque
+// SI haya venido originalmente de un anuncio. Por eso esto NO puede ser el
+// unico criterio para decidir si se atiende a alguien.
 function vieneDeAnuncio(msg) {
   const ctx = msg.message?.extendedTextMessage?.contextInfo
     || msg.message?.imageMessage?.contextInfo
@@ -172,8 +177,8 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
   const s = sessions[jid];
   s.lastActivity = Date.now();
 
-  // En el primer mensaje de la conversacion: detectar si vino de un anuncio de Meta
-  // (se usa para decidir si arranca el flujo automatico, ya no se manda aviso aqui)
+  // En el primer mensaje de la conversacion: detectar si vino de un anuncio de Meta.
+  // Esto es solo una SEÑAL, no la unica puerta de entrada (ver mas abajo).
   if (esNueva) {
     s.esAnuncio = vieneDeAnuncio(msg);
   }
@@ -214,43 +219,57 @@ async function procesarMensaje(jid, texto, hasImage, msg) {
   }
 
   if (s.paso === 'inicio') {
-    // El flujo automatico completo (bienvenida, foto, quimicos) SOLO arranca
-    // si la clienta llego por un anuncio de Meta. Si escribio directo (sin
-    // venir de anuncio), el bot no sigue — ya se avisó a la administradora.
-    if (!s.esAnuncio) return;
-
-    // Primero chequear si viene de pauta (texto exacto)
+    // Intentar identificar el servicio SIEMPRE, sin importar si detectamos
+    // metadata de anuncio o no. La metadata de Meta es una señal poco confiable
+    // (solo llega en el primer clic, y se pierde si el bot se reinicia), asi
+    // que no puede ser el unico portero del flujo.
     const textoNorm = norm(texto).trim().replace(/\s+/g,'_');
     let servicio = PAUTAS[textoNorm] || PAUTAS[norm(texto).trim()] || null;
-
-    // Si no es pauta, detectar por palabras clave
     if (!servicio) servicio = detectService(texto);
-
-    // Si tampoco, usar Groq
     if (!servicio && texto.length > 2) servicio = await detectWithGroq(texto);
 
-    if (!servicio) {
+    if (servicio) {
+      // Se identificó un servicio (por pauta, palabra clave o IA) -> arranca
+      // el flujo automatico, venga o no marcado como anuncio por WhatsApp.
+      s.servicio = servicio;
+
+      if (servicio === 'novia') {
+        s.paso = 'foto';
+        await sock.sendMessage(jid, { text: PREGUNTA_FOTO_NOVIA });
+        return;
+      }
+
+      s.paso = 'foto';
+      await sock.sendMessage(jid, { text: CONFIRMA_INTERES });
+      await new Promise(r => setTimeout(r, 1200));
+      await sock.sendMessage(jid, { text: CONFIRMA_INTERES_2 });
+      await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, '');
+      await new Promise(r => setTimeout(r, 1000));
+      await sock.sendMessage(jid, { text: PIDE_FOTO });
+      return;
+    }
+
+    if (s.esAnuncio) {
+      // Vino de anuncio pero no se identificó el servicio por texto -> preguntamos.
       await sock.sendMessage(jid, { text: GREET_1 });
       await new Promise(r => setTimeout(r, 800));
       await sock.sendMessage(jid, { text: GREET_2 });
       return;
     }
 
-    s.servicio = servicio;
-
-    if (servicio === 'novia') {
-      s.paso = 'foto';
-      await sock.sendMessage(jid, { text: PREGUNTA_FOTO_NOVIA });
-      return;
+    // No vino de anuncio Y no se pudo identificar servicio: antes esto se
+    // ignoraba en silencio (ni la clienta ni Diego se enteraban). Ahora se
+    // avisa a Diego/Karen para que atienda manualmente -- esto cubre tanto
+    // mensajes directos genericos como clientas antiguas que escriben sin
+    // pasar por un anuncio.
+    if (!s.alertaDirectaEnviada) {
+      s.alertaDirectaEnviada = true;
+      try {
+        await sock.sendMessage(LIDER_NUM, {
+          text: `💬 *Mensaje directo recibido*\n\n*Cliente:* ${jid.replace('@s.whatsapp.net','')}\n*Mensaje:* ${texto}\n\nNo se identificó un servicio automáticamente ni viene de un anuncio — por favor atiende manualmente 💛`
+        });
+      } catch(e) { console.log('Error notificando mensaje directo:', e.message); }
     }
-
-    s.paso = 'foto';
-    await sock.sendMessage(jid, { text: CONFIRMA_INTERES });
-    await new Promise(r => setTimeout(r, 1200));
-    await sock.sendMessage(jid, { text: CONFIRMA_INTERES_2 });
-    await sendImage(sock, connectionStatus, jid, REF_FOTO_URL, '');
-    await new Promise(r => setTimeout(r, 1000));
-    await sock.sendMessage(jid, { text: PIDE_FOTO });
     return;
   }
 
